@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Pro - ZR-Shop</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="admin-body">
+    <div class="admin-container">
+        <header class="admin-header">
+            <h1><i class="fas fa-crown"></i> Admin Pro ZR-Shop</h1>
+            <div>
+                <span id="productsCount">0</span> produit(s) sur le site
+                <button class="logout-btn" onclick="admin.logout()">Déconnexion</button>
+            </div>
+        </header>
+
+        <!-- GITHUB TOKEN -->
+        <div class="admin-section" style="margin-bottom:20px;">
+            <h2><i class="fas fa-key"></i> Connexion GitHub</h2>
+            <div id="tokenSection">Chargement...</div>
+        </div>
+
+        <!-- AJOUT PRODUIT -->
+        <div class="admin-section">
+            <h2><i class="fas fa-plus-circle"></i> Nouveau Produit</h2>
+            <form id="productForm" class="admin-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nom <span class="required">*</span></label>
+                        <input type="text" id="productName" placeholder="Ex: Écouteurs Bluetooth Pro" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Prix (MAD) <span class="required">*</span></label>
+                        <input type="number" id="productPrice" step="0.01" placeholder="Ex: 199.00" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="productDesc" rows="3" placeholder="Décrivez votre produit..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock</label>
+                        <input type="number" id="productStock" min="0" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Catégorie</label>
+                        <select id="productCategory">
+                            <option>Tech</option>
+                            <option>Accessoires de Maison</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="media-section">
+                    <h3><i class="fas fa-images"></i> Médias (Photos + Vidéo) — max 10</h3>
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-area" onclick="document.getElementById('mediaFiles').click()">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Cliquez ou glissez-déposez vos photos/vidéos</p>
+                            <small style="color:#aaa;">Max 50MB par fichier</small>
+                            <input type="file" id="mediaFiles" multiple accept="image/*,video/*" style="display:none;">
+                        </div>
+                        <div class="preview-container" id="previewContainer"></div>
+                    </div>
+                </div>
+
+                <button type="submit" class="admin-btn primary">
+                    <i class="fas fa-rocket"></i> Publier le produit
+                </button>
+            </form>
+        </div>
+
+        <!-- LISTE PRODUITS -->
+        <div class="admin-section">
+            <h2><i class="fas fa-list"></i> Produits sur le site</h2>
+            <div class="products-list" id="adminProductsList"></div>
+        </div>
+    </div>
+
+    <script src="admin-script.js"></script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZR-Shop - Boutique Premium 🔥</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="logo">
+                    <h2><i class="fas fa-crown"></i> ZR-Shop</h2>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="#home">Accueil</a></li>
+                    <li><a href="#products">Produits</a></li>
+                    <li><a href="#categories">Catégories</a></li>
+                    <li><a href="#contact">Commander</a></li>
+                </ul>
+                <div class="nav-actions">
+                    <a href="https://instagram.com/zr__shopping" class="nav-social" target="_blank">
+                        <i class="fab fa-instagram"></i>
+                    </a>
+                    <a href="https://tiktok.com/@zr__shopping" class="nav-social" target="_blank">
+                        <i class="fab fa-tiktok"></i>
+                    </a>
+                    <div class="hamburger">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section id="home" class="hero">
+            <div class="hero-bg"></div>
+            <div class="hero-content">
+                <div class="badge">🔥 NOUVEAUTÉS 2026</div>
+                <h1>Bienvenue chez <span>ZR-Shop</span></h1>
+                <p class="hero-subtitle">Premium Quality • Livraison Rapide • Satisfaction 100% Garantie</p>
+                <div class="hero-stats">
+                    <div><span id="productsCountHero">0</span>+ Produits</div>
+                    <div>Livraison Maroc</div>
+                    <div>⭐ 4.9/5</div>
+                </div>
+                <div class="hero-buttons">
+                    <a href="#products" class="cta-button primary">
+                        <i class="fas fa-shopping-bag"></i> Explorer la boutique
+                    </a>
+                </div>
+            </div>
+            <div class="scroll-indicator"><i class="fas fa-chevron-down"></i></div>
+        </section>
+
+        <section id="products" class="products premium">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Nos <span>Produits</span> Stars</h2>
+                    <p>Découvrez notre sélection exclusive</p>
+                </div>
+                <div class="products-grid" id="productsGrid"></div>
+                <div class="load-more" id="loadMoreBtn" style="display:none;">
+                    <button class="cta-button outline" onclick="zrshop.visibleProducts+=6;zrshop.renderProducts();">Charger plus</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="categories" class="categories">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Nos <span>Catégories</span></h2>
+                    <p>Trouvez exactement ce que vous cherchez</p>
+                </div>
+                <div class="categories-grid">
+                    <div class="category-card" data-category="Tech">
+                        <div class="category-icon"><i class="fas fa-mobile-alt"></i></div>
+                        <h3>Tech</h3><p>Innovation & Gadgets</p>
+                    </div>
+                    <div class="category-card" data-category="Accessoires de Maison">
+                        <div class="category-icon"><i class="fas fa-home"></i></div>
+                        <h3>Accessoires de Maison</h3><p>Confort & Style</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="contact" class="contact">
+            <div class="container">
+                <div class="section-header light">
+                    <h2>Commander en <span>3 clics</span></h2>
+                    <p>Simple, rapide, sécurisé</p>
+                </div>
+                <div class="order-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content"><h3>Choisir</h3><p>Sélectionnez votre produit</p></div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content"><h3>WhatsApp</h3><p>Message envoyé automatiquement</p></div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content"><h3>Livraison</h3><p>Reçu chez vous au Maroc</p></div>
+                    </div>
+                </div>
+                <div class="instagram-cta">
+                    <a href="https://wa.me/212728805714" target="_blank" class="instagram-btn giant whatsapp-btn">
+                        <i class="fab fa-whatsapp"></i>
+                        <span>Commander sur WhatsApp</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <a href="https://tiktok.com/@zr__shopping" target="_blank" class="instagram-btn giant tiktok-btn">
+                        <i class="fab fa-tiktok"></i>
+                        <span>Suivez-nous sur TikTok</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3><i class="fas fa-crown"></i> ZR-Shop</h3>
+                    <p>La référence premium au Maroc</p>
+                </div>
+                <div class="footer-links">
+                    <a href="#products">Produits</a>
+                    <a href="#contact">Commander</a>
+                    <a href="admin.html">Admin</a>
+                </div>
+                <div class="footer-social">
+                    <a href="https://instagram.com/zr__shopping" target="_blank">
+                        <i class="fab fa-instagram"></i> @zr__shopping
+                    </a>
+                    <a href="https://tiktok.com/@zr__shopping" target="_blank">
+                        <i class="fab fa-tiktok"></i> @zr__shopping
+                    </a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 ZR-Shop. Paiement à la livraison. Tous droits réservés.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
