@@ -8,6 +8,31 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="admin-body">
+
+<!-- ══ GitHub Setup Modal ══ -->
+<div id="githubSetupModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:20px;padding:35px 40px;width:90%;max-width:480px;box-shadow:0 30px 80px rgba(0,0,0,0.4);">
+        <h2 style="margin:0 0 8px;font-size:1.5rem;">⚙️ إعداد GitHub</h2>
+        <p style="color:#666;margin:0 0 24px;font-size:0.92rem;">هاد الإعداد غير مرة واحدة — بعدها كل شي كيخدم أوتوماتيك ✨</p>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+                <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:5px;">👤 GitHub Username</label>
+                <input id="ghUser" type="text" placeholder="ex: zrshop2026" style="width:100%;border:2px solid #eee;border-radius:10px;padding:10px 14px;font-size:0.95rem;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:5px;">📁 Nom du Repository</label>
+                <input id="ghRepo" type="text" placeholder="ex: zr-shop" style="width:100%;border:2px solid #eee;border-radius:10px;padding:10px 14px;font-size:0.95rem;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:5px;">🔑 GitHub Token (سري)</label>
+                <input id="ghToken" type="password" placeholder="ghp_xxxxxxxxxxxx" style="width:100%;border:2px solid #eee;border-radius:10px;padding:10px 14px;font-size:0.95rem;box-sizing:border-box;">
+                <small style="color:#999;font-size:0.78rem;">Settings → Developer Settings → Personal Access Tokens → New token → صلاحية <strong>repo</strong></small>
+            </div>
+        </div>
+        <button onclick="admin.saveGithubConfig()" style="margin-top:20px;width:100%;background:linear-gradient(45deg,#667eea,#764ba2);color:white;border:none;padding:13px;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;">🚀 ربط مع GitHub</button>
+    </div>
+</div>
+
     <div class="admin-container">
         <header class="admin-header">
             <h1><i class="fas fa-crown"></i> Admin Pro ZR-Shop</h1>
@@ -17,13 +42,7 @@
             </div>
         </header>
 
-        <!-- GITHUB TOKEN -->
-        <div class="admin-section" style="margin-bottom:20px;">
-            <h2><i class="fas fa-key"></i> Connexion GitHub</h2>
-            <div id="tokenSection">Chargement...</div>
-        </div>
-
-        <!-- AJOUT PRODUIT -->
+        <!-- Ajout Produit -->
         <div class="admin-section">
             <h2><i class="fas fa-plus-circle"></i> Nouveau Produit</h2>
             <form id="productForm" class="admin-form">
@@ -37,7 +56,7 @@
                         <input type="number" id="productPrice" step="0.01" placeholder="Ex: 199.00" required>
                     </div>
                 </div>
-
+                
                 <div class="form-group">
                     <label>Description</label>
                     <textarea id="productDesc" rows="3" placeholder="Décrivez votre produit..."></textarea>
@@ -57,16 +76,27 @@
                     </div>
                 </div>
 
+                <!-- MULTI-PHOTOS & VIDÉO -->
                 <div class="media-section">
-                    <h3><i class="fas fa-images"></i> Médias (Photos + Vidéo) — max 10</h3>
+                    <h3><i class="fas fa-images"></i> Photos — max 10</h3>
                     <div class="upload-zone" id="uploadZone">
                         <div class="upload-area" onclick="document.getElementById('mediaFiles').click()">
                             <i class="fas fa-cloud-upload-alt"></i>
-                            <p>Cliquez ou glissez-déposez vos photos/vidéos</p>
-                            <small style="color:#aaa;">Max 50MB par fichier</small>
-                            <input type="file" id="mediaFiles" multiple accept="image/*,video/*" style="display:none;">
+                            <p>Cliquez ou glissez-déposez vos photos</p>
+                            <small style="color:#aaa;">Compressées automatiquement avant publication</small>
+                            <input type="file" id="mediaFiles" multiple accept="image/*" style="display:none;">
                         </div>
                         <div class="preview-container" id="previewContainer"></div>
+                    </div>
+                    <div style="margin-top:14px;padding:14px;background:#f8f8f8;border-radius:10px;">
+                        <label style="font-weight:600;font-size:0.9rem;display:block;margin-bottom:8px;">
+                            <i class="fas fa-video"></i> Vidéo (lien externe — Cloudinary, etc.)
+                        </label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="url" id="videoUrlInput" placeholder="https://..." style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;">
+                            <button type="button" class="admin-btn" style="background:#667eea;color:#fff;white-space:nowrap;" onclick="admin.addVideoUrl()">Ajouter</button>
+                        </div>
+                        <small style="color:#aaa;">Héberge les vidéos f Cloudinary/CDN o zid ghir l-lien hna — GitHub ma kayqbelch les vidéos direct (base64) fach kaykono kbar.</small>
                     </div>
                 </div>
 
@@ -76,7 +106,7 @@
             </form>
         </div>
 
-        <!-- LISTE PRODUITS -->
+        <!-- Liste Produits -->
         <div class="admin-section">
             <h2><i class="fas fa-list"></i> Produits sur le site</h2>
             <div class="products-list" id="adminProductsList"></div>
