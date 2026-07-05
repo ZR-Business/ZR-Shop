@@ -1,50 +1,32 @@
 // ══════════════════════════════════════════════════════════════
-//  ZR-SHOP ADMIN — GitHub Issues كـ base de données
+//  ZR-Shop Admin Pro — GitHub API Edition
+//  Token: kayb9a f localStorage dyalek GHIR, machi f code
 // ══════════════════════════════════════════════════════════════
+
+const GITHUB_REPO   = 'ZR-Business/ZR-Shop';
+const GITHUB_FILE   = 'data.json';
+const GITHUB_BRANCH = 'main';
 
 class AdminZRShopPro {
     constructor() {
-        this.products = [];
+        this.products      = [];
         this.mediaPreviews = [];
-        this.mediaFileRefs = []; // même longueur que mediaPreviews — File d'origine (ou null) pour pouvoir recompresser
-        this.editingId = null;
-        this.GITHUB_USER  = localStorage.getItem('gh_user')  || '';
-        this.GITHUB_REPO  = localStorage.getItem('gh_repo')  || '';
-        this.GITHUB_TOKEN = localStorage.getItem('gh_token') || '';
+        this.editingId     = null;
+        this.githubToken   = localStorage.getItem('zrshop_gh_token') || '';
         this.init();
     }
 
+    // ── INIT ────────────────────────────────────────────────────
     init() {
         this.checkAuth();
-        if (!this.GITHUB_USER || !this.GITHUB_REPO || !this.GITHUB_TOKEN) {
-            this.showGithubSetup();
-        } else {
-            this.loadProducts();
-        }
-        this.setupEventListeners();
-    }
-
-    showGithubSetup() {
-        document.getElementById('githubSetupModal').style.display = 'flex';
-    }
-
-    saveGithubConfig() {
-        const user  = document.getElementById('ghUser').value.trim();
-        const repo  = document.getElementById('ghRepo').value.trim();
-        const token = document.getElementById('ghToken').value.trim();
-        if (!user || !repo || !token) { alert('⚠️ املا جميع الحقول!'); return; }
-        localStorage.setItem('gh_user', user);
-        localStorage.setItem('gh_repo', repo);
-        localStorage.setItem('gh_token', token);
-        this.GITHUB_USER = user; this.GITHUB_REPO = repo; this.GITHUB_TOKEN = token;
-        document.getElementById('githubSetupModal').style.display = 'none';
-        this.showNotification('✅ GitHub متصل!');
+        this.renderTokenSection();
         this.loadProducts();
+        this.setupEventListeners();
     }
 
     checkAuth() {
         if (!localStorage.getItem('zrshop_admin_pro')) {
-            const pass = prompt('🔐 Mot de passe:');
+            const pass = prompt('🔐 Mot de passe admin:');
             if (pass === 'zrshop2026') {
                 localStorage.setItem('zrshop_admin_pro', 'true');
             } else {
@@ -61,324 +43,332 @@ class AdminZRShopPro {
         window.location.href = 'index.html';
     }
 
-    get apiBase() { return `https://api.github.com/repos/${this.GITHUB_USER}/${this.GITHUB_REPO}`; }
-    get headers() {
-        return {
-            'Authorization': `token ${this.GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-        };
+    // ── TOKEN SECTION ────────────────────────────────────────────
+    renderTokenSection() {
+        const container = document.getElementById('tokenSection');
+        if (!container) return;
+        const hasToken = !!this.githubToken;
+        container.innerHTML = `
+            <div class="token-box ${hasToken ? 'token-ok' : 'token-missing'}">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <div style="font-size:1.5rem;">${hasToken ? '🔑' : '⚠️'}</div>
+                    <div style="flex:1;">
+                        <strong>${hasToken ? 'GitHub Token configuré ✅' : 'GitHub Token manquant ⚠️'}</strong><br>
+                        <small style="color:#666;">
+                            ${hasToken
+                                ? 'Les produits sont synchronisés avec GitHub automatiquement.'
+                                : 'Sans token, les produits ne seront pas visibles sur le site pour tous les visiteurs.'}
+                        </small>
+                    </div>
+                    <button onclick="admin.toggleTokenInput()" class="admin-btn" style="background:#667eea;color:white;padding:8px 16px;border-radius:8px;font-size:0.85rem;">
+                        ${hasToken ? '🔄 Changer token' : '➕ Ajouter token'}
+                    </button>
+                    ${hasToken ? `<button onclick="admin.removeToken()" class="admin-btn danger" style="padding:8px 16px;border-radius:8px;font-size:0.85rem;">🗑️</button>` : ''}
+                </div>
+                <div id="tokenInputArea" style="display:none;margin-top:15px;">
+                    <div style="background:#fff8e1;border:2px solid #ffc107;border-radius:10px;padding:12px;margin-bottom:10px;font-size:0.85rem;">
+                        🔒 <strong>Sécurité:</strong> Le token est stocké uniquement dans <em>votre navigateur</em> — jamais dans le code ni sur GitHub.
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <input type="password" id="tokenInput"
+                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                            style="flex:1;padding:10px 14px;border:2px solid #ddd;border-radius:8px;font-size:0.9rem;min-width:200px;"
+                            value="">
+                        <button onclick="admin.saveToken()" class="admin-btn primary" style="padding:10px 20px;border-radius:8px;">
+                            💾 Enregistrer
+                        </button>
+                    </div>
+                    <small style="color:#aaa;margin-top:6px;display:block;">
+                        GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → scope: ✅ repo
+                    </small>
+                </div>
+            </div>`;
     }
 
-    issueToProduct(issue) {
-        try {
-            const match = issue.body.match(/```json\n([\s\S]*?)\n```/);
-            if (!match) return null;
-            const data = JSON.parse(match[1]);
-            return { ...data, id: issue.number, _issueNumber: issue.number };
-        } catch { return null; }
+    toggleTokenInput() {
+        const area = document.getElementById('tokenInputArea');
+        if (area) area.style.display = area.style.display === 'none' ? 'block' : 'none';
     }
 
-    async loadProducts() {
-        this.showLoading(true);
-        try {
-            const res = await fetch(`${this.apiBase}/issues?labels=produit&state=open&per_page=100`, { headers: this.headers });
-            if (!res.ok) throw new Error(`GitHub API: ${res.status}`);
-            const issues = await res.json();
-            this.products = issues.map(i => this.issueToProduct(i)).filter(Boolean)
-                .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-            this.renderProductsList();
-            document.getElementById('productsCount').textContent = this.products.length;
-        } catch (err) {
-            console.error(err);
-            this.showNotification('❌ خطأ في تحميل المنتجات — تحقق من الإعدادات');
+    saveToken() {
+        const input = document.getElementById('tokenInput');
+        const token = input?.value.trim();
+        if (!token || !token.startsWith('ghp_')) {
+            alert('❌ Token invalide — doit commencer par ghp_');
+            return;
         }
-        this.showLoading(false);
+        this.githubToken = token;
+        localStorage.setItem('zrshop_gh_token', token);
+        this.renderTokenSection();
+        this.showNotification('🔑 Token enregistré ! Publie un produit pour tester.', 'success');
     }
 
-    async ensureLabel() {
+    removeToken() {
+        if (confirm('Supprimer le token GitHub ?')) {
+            this.githubToken = '';
+            localStorage.removeItem('zrshop_gh_token');
+            this.renderTokenSection();
+            this.showNotification('🗑️ Token supprimé', 'warning');
+        }
+    }
+
+    // ── GITHUB API ───────────────────────────────────────────────
+    async pushToGitHub(products) {
+        if (!this.githubToken) {
+            this.showNotification('⚠️ Ajoute ton GitHub Token d\'abord !', 'warning');
+            return false;
+        }
+
+        // Vérifier taille — GitHub max ~50MB mais on limite à 5MB pour sécurité
+        const jsonStr = JSON.stringify(products, null, 2);
+        const sizeKB = Math.round(new Blob([jsonStr]).size / 1024);
+        if (sizeKB > 5000) {
+            this.showNotification(`❌ Données trop lourdes (${sizeKB}KB) — réduis le nombre de photos ou leur taille`, 'error');
+            return false;
+        }
+
+        const content = btoa(unescape(encodeURIComponent(jsonStr)));
+
         try {
-            await fetch(`${this.apiBase}/labels`, {
-                method: 'POST', headers: this.headers,
-                body: JSON.stringify({ name: 'produit', color: 'ff6b35' })
-            });
-        } catch {}
+            // 1. Récupérer SHA actuel
+            const getRes = await fetch(
+                `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}?ref=${GITHUB_BRANCH}`,
+                { headers: { Authorization: `token ${this.githubToken}`, Accept: 'application/vnd.github.v3+json' } }
+            );
+            let sha = null;
+            if (getRes.ok) {
+                sha = (await getRes.json()).sha;
+            } else if (getRes.status !== 404) {
+                throw new Error(`GitHub GET: ${getRes.status}`);
+            }
+
+            // 2. Push fichier
+            const putRes = await fetch(
+                `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
+                {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `token ${this.githubToken}`,
+                        Accept: 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: `🛍️ Update products — ${new Date().toLocaleString('fr-MA')}`,
+                        content,
+                        branch: GITHUB_BRANCH,
+                        ...(sha ? { sha } : {})
+                    })
+                }
+            );
+
+            if (!putRes.ok) {
+                const err = await putRes.json();
+                throw new Error(err.message || putRes.status);
+            }
+            return true;
+        } catch (err) {
+            console.error('GitHub API Error:', err);
+            this.showNotification(`❌ Erreur GitHub: ${err.message}`, 'error');
+            return false;
+        }
     }
 
-    async saveNewProduct(productData) {
-        await this.ensureLabel();
-        const body = `<!-- ZR-Shop Product -->\n\`\`\`json\n${JSON.stringify(productData, null, 2)}\n\`\`\``;
-        const res = await fetch(`${this.apiBase}/issues`, {
-            method: 'POST', headers: this.headers,
-            body: JSON.stringify({ title: `[PRODUIT] ${productData.name}`, body, labels: ['produit'] })
-        });
-        if (!res.ok) { const err = await res.json(); throw new Error(err.message); }
-        return await res.json();
+    // ── PRODUCTS ─────────────────────────────────────────────────
+    loadProducts() {
+        const saved = localStorage.getItem('zrshop_products');
+        this.products = saved ? JSON.parse(saved) : [];
+        this.renderProductsList();
+        document.getElementById('productsCount').textContent = this.products.length;
     }
 
-    async updateProduct(issueNumber, productData) {
-        const body = `<!-- ZR-Shop Product -->\n\`\`\`json\n${JSON.stringify(productData, null, 2)}\n\`\`\``;
-        const res = await fetch(`${this.apiBase}/issues/${issueNumber}`, {
-            method: 'PATCH', headers: this.headers,
-            body: JSON.stringify({ title: `[PRODUIT] ${productData.name}`, body })
-        });
-        if (!res.ok) throw new Error('Erreur update');
+    saveLocal() {
+        localStorage.setItem('zrshop_products', JSON.stringify(this.products));
     }
 
-    async deleteProductFromGitHub(issueNumber) {
-        const res = await fetch(`${this.apiBase}/issues/${issueNumber}`, {
-            method: 'PATCH', headers: this.headers,
-            body: JSON.stringify({ state: 'closed' })
-        });
-        if (!res.ok) throw new Error('Erreur suppression');
-    }
-
+    // ── FORM ─────────────────────────────────────────────────────
     setupEventListeners() {
         document.getElementById('productForm').onsubmit = (e) => this.addProduct(e);
-        const fileInput = document.getElementById('mediaFiles');
+        const fileInput  = document.getElementById('mediaFiles');
         const uploadZone = document.getElementById('uploadZone');
-        fileInput.onchange = () => this.handleFiles(fileInput.files);
+        fileInput.onchange    = () => this.handleFiles(fileInput.files);
         uploadZone.ondragover = (e) => e.preventDefault();
-        uploadZone.ondrop = (e) => { e.preventDefault(); this.handleFiles(e.dataTransfer.files); };
+        uploadZone.ondrop     = (e) => { e.preventDefault(); this.handleFiles(e.dataTransfer.files); };
     }
 
-    async handleFiles(files) {
-        for (const file of Array.from(files)) {
-            if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias!'); break; }
-            if (!file.type.includes('image')) {
-                alert(`"${file.name}" mashi ṣura — les vidéos khass tzidhom b lien (chouf l-champ "Vidéo (lien externe)" taht).`);
-                continue;
-            }
-            try {
-                // Compression rapide initiale (sera réajustée par recompressAll juste après).
-                const url = await this.compressImageToBudget(file, 999999);
-                this.mediaPreviews.push({ url, name: file.name, type: 'image' });
-                this.mediaFileRefs.push(file);
-            } catch (err) {
-                console.error(err);
-                alert(`❌ Mقدرتش نضغط "${file.name}". Jarreb ṣura khra.`);
-            }
-        }
-        await this.recompressAll();
-        this.renderPreviews();
-    }
+    handleFiles(files) {
+        Array.from(files).forEach(file => {
+            if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias !'); return; }
+            if (file.size > 50 * 1024 * 1024) { alert(`"${file.name}" dépasse 50MB.`); return; }
 
-    // Redistribue le budget de caractères entre toutes les photos "recompressables"
-    // (celles dont on a gardé le File d'origine) pour que le total du produit reste
-    // sous la limite GitHub, même si l'utilisatrice ajoute beaucoup de photos.
-    async recompressAll() {
-        const TOTAL_BUDGET = 55000;
-        let fixedLength = 0;
-        const toRecompress = [];
-        this.mediaPreviews.forEach((p, i) => {
-            if (this.mediaFileRefs[i]) toRecompress.push(i);
-            else fixedLength += (p.url ? p.url.length : 0);
-        });
-        if (toRecompress.length === 0) return;
-        const perImageBudget = Math.max(3500, Math.floor((TOTAL_BUDGET - fixedLength) / toRecompress.length));
-        for (const i of toRecompress) {
-            const url = await this.compressImageToBudget(this.mediaFileRefs[i], perImageBudget);
-            this.mediaPreviews[i] = { ...this.mediaPreviews[i], url };
-        }
-    }
-
-    // Réduit progressivement taille/qualité jusqu'à tenir dans le budget de
-    // caractères donné (dataURL base64). Évite de dépasser la limite GitHub
-    // même quand il y a beaucoup de photos sur le même produit.
-    compressImageToBudget(file, targetChars = 7000) {
-        const steps = [
-            { width: 900, quality: 0.6 }, { width: 700, quality: 0.55 },
-            { width: 500, quality: 0.5 }, { width: 380, quality: 0.45 },
-            { width: 300, quality: 0.4 }, { width: 220, quality: 0.35 },
-            { width: 160, quality: 0.3 }
-        ];
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = () => reject(new Error('read failed'));
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onerror = () => reject(new Error('image load failed'));
-                img.onload = () => {
-                    let best = null;
-                    for (const step of steps) {
-                        let w = img.width, h = img.height;
-                        if (w > step.width) { h = Math.round(h * (step.width / w)); w = step.width; }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = w; canvas.height = h;
-                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        const dataUrl = canvas.toDataURL('image/jpeg', step.quality);
-                        best = dataUrl;
-                        if (dataUrl.length <= targetChars) break;
-                    }
-                    resolve(best);
+            if (file.type.includes('video')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.mediaPreviews.push({ url: e.target.result, name: file.name, type: 'video' });
+                    this.renderPreviews();
                 };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+                reader.readAsDataURL(file);
+            } else {
+                // Kompressiw image qbel ma nkheznuha — khfif l GitHub
+                const img = new Image();
+                const objectUrl = URL.createObjectURL(file);
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const maxW = 800;
+                    const ratio = Math.min(maxW / img.width, maxW / img.height, 1);
+                    canvas.width  = Math.round(img.width  * ratio);
+                    canvas.height = Math.round(img.height * ratio);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.72);
+                    URL.revokeObjectURL(objectUrl);
+                    this.mediaPreviews.push({ url: compressed, name: file.name, type: 'image' });
+                    this.renderPreviews();
+                };
+                img.src = objectUrl;
+            }
         });
-    }
-
-    addVideoUrl() {
-        const input = document.getElementById('videoUrlInput');
-        const url = input.value.trim();
-        if (!url) { alert('⚠️ Dkhel lien dyal la vidéo!'); return; }
-        if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias!'); return; }
-        this.mediaPreviews.push({ url, name: 'video-link', type: 'video' });
-        this.mediaFileRefs.push(null);
-        input.value = '';
-        this.renderPreviews();
     }
 
     renderPreviews() {
-        const totalChars = this.mediaPreviews.reduce((sum, p) => sum + (p.url ? p.url.length : 0), 0);
-        const totalKB = Math.round(totalChars / 1024);
-        const over = totalChars > 60000;
-        const sizeInfo = this.mediaPreviews.length ? `
-            <div style="grid-column:1/-1;font-size:0.85rem;font-weight:600;color:${over ? '#e74c3c' : '#2ed573'};padding:4px 0;">
-                ${over ? '⚠️' : '✅'} Total médias : ~${totalKB}KB ${over ? '(kbar bzzaf — hيد chi ṣura)' : '(mzyan)'}
-            </div>` : '';
-        document.getElementById('previewContainer').innerHTML = sizeInfo +
+        document.getElementById('previewContainer').innerHTML =
             this.mediaPreviews.map((p, i) => `
                 <div class="preview-item">
-                    ${p.type === 'video' ? `<video src="${p.url}" style="width:100%;height:100%;object-fit:cover;"></video>` : `<img src="${p.url}" style="width:100%;height:100%;object-fit:cover;">`}
+                    ${p.type === 'video'
+                        ? `<video src="${p.url}" style="width:100%;height:100%;object-fit:cover;"></video>`
+                        : `<img src="${p.url}" style="width:100%;height:100%;object-fit:cover;">`}
                     <button class="remove-btn" onclick="admin.removeMedia(${i})">×</button>
                 </div>`).join('');
     }
 
-    async removeMedia(index) {
-        this.mediaPreviews.splice(index, 1);
-        this.mediaFileRefs.splice(index, 1);
-        await this.recompressAll();
+    removeMedia(i) {
+        this.mediaPreviews.splice(i, 1);
         this.renderPreviews();
     }
 
     async addProduct(e) {
         e.preventDefault();
-        const name = document.getElementById('productName').value.trim();
-        if (!name) { alert('❌ Nom requis!'); return; }
-        if (this.mediaPreviews.length === 0) { alert('📸 Ajoute au moins 1 photo!'); return; }
-        this.showLoading(true);
-        try {
-            const productData = {
-                name,
-                price: parseFloat(document.getElementById('productPrice').value) || 0,
+        if (!document.getElementById('productName').value.trim()) { alert('❌ Nom requis !'); return; }
+        if (this.mediaPreviews.length === 0) { alert('📸 Ajoute au moins 1 photo/vidéo !'); return; }
+
+        const btn = document.querySelector('.admin-btn.primary');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication en cours...';
+
+        const mediaData = this.mediaPreviews.map(m => ({ type: m.type, url: m.url, name: m.name }));
+
+        if (this.editingId) {
+            const idx = this.products.findIndex(p => p.id === this.editingId);
+            if (idx !== -1) {
+                this.products[idx] = {
+                    ...this.products[idx],
+                    name:        document.getElementById('productName').value.trim(),
+                    price:       parseFloat(document.getElementById('productPrice').value) || 0,
+                    description: document.getElementById('productDesc').value || '',
+                    category:    document.getElementById('productCategory').value,
+                    stock:       parseInt(document.getElementById('productStock').value) || 10,
+                    media:       mediaData
+                };
+            }
+            this.editingId = null;
+        } else {
+            this.products.unshift({
+                id:          Date.now(),
+                name:        document.getElementById('productName').value.trim(),
+                price:       parseFloat(document.getElementById('productPrice').value) || 0,
                 description: document.getElementById('productDesc').value || '',
-                category: document.getElementById('productCategory').value,
-                stock: parseInt(document.getElementById('productStock').value) || 10,
-                media: this.mediaPreviews.map(m => ({ type: m.type, url: m.url, name: m.name })),
-                date: new Date().toISOString()
-            };
-
-            // GitHub limite le body d'un issue à 65 536 caractères — on vérifie
-            // avant l'envoi pour éviter un échec silencieux ou une longue attente inutile.
-            const payloadSize = JSON.stringify(productData).length;
-            if (payloadSize > 60000) {
-                this.showLoading(false);
-                alert(`⚠️ Les médias kbar bzzaf (${Math.round(payloadSize/1024)}KB). Hيد chi ṣura wla استعمل ṣur أصغر — GitHub kayqbel ghir 65KB f kol produit.`);
-                return;
-            }
-
-            if (this.editingId) {
-                const product = this.products.find(p => p.id === this.editingId);
-                await this.updateProduct(product._issueNumber, productData);
-                this.showNotification(`✅ "${name}" محدث!`);
-                this.editingId = null;
-                document.querySelector('.admin-btn.primary').innerHTML = '<i class="fas fa-rocket"></i> Publier le produit';
-            } else {
-                await this.saveNewProduct(productData);
-                this.showNotification(`✅ "${name}" publié sur le site!`);
-            }
-            document.getElementById('productForm').reset();
-            this.mediaPreviews = [];
-            this.mediaFileRefs = [];
-            document.getElementById('previewContainer').innerHTML = '';
-            await this.loadProducts();
-        } catch (err) {
-            console.error(err);
-            let msg = err.message || 'Erreur inconnue';
-            if (/too long/i.test(msg)) {
-                msg = 'Les médias kbar bzzaf f had l-produit — نقص شي ṣura.';
-            } else if (/401|Bad credentials/i.test(msg)) {
-                msg = 'Token GitHub ghalat wla khass tجدد — dkhel l-Settings o zid token jdid.';
-            } else if (/403/i.test(msg)) {
-                msg = 'Rate limit wla accès mrfoud mn GitHub — sna chi dqiqa o 3awd جرب.';
-            } else if (/Failed to fetch/i.test(msg)) {
-                msg = 'Mشي connecté l internet, wla GitHub ma jawebch — تأكد من الاتصال.';
-            }
-            this.showNotification('❌ ' + msg);
+                category:    document.getElementById('productCategory').value,
+                stock:       parseInt(document.getElementById('productStock').value) || 10,
+                media:       mediaData,
+                date:        new Date().toISOString()
+            });
         }
-        this.showLoading(false);
+
+        this.saveLocal();
+        const pushed = await this.pushToGitHub(this.products);
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rocket"></i> Publier le produit';
+
+        if (pushed) {
+            this.showNotification('✅ Produit publié sur le site ! (GitHub mis à jour)', 'success');
+        } else {
+            this.showNotification('💾 Sauvegardé localement — ajoute ton token GitHub pour publier', 'warning');
+        }
+
+        document.getElementById('productForm').reset();
+        this.mediaPreviews = [];
+        document.getElementById('previewContainer').innerHTML = '';
+        this.renderProductsList();
+        document.getElementById('productsCount').textContent = this.products.length;
     }
 
+    // ── LISTE ────────────────────────────────────────────────────
     renderProductsList() {
         document.getElementById('adminProductsList').innerHTML =
-            this.products.map(product => `
+            this.products.map(p => `
                 <div class="product-admin-item">
                     <div style="display:flex;align-items:center;gap:15px;">
-                        ${product.media?.[0] ? (product.media[0].type === 'video'
-                            ? `<video src="${product.media[0].url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;" muted></video>`
-                            : `<img src="${product.media[0].url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;">`)
+                        ${p.media?.[0]
+                            ? (p.media[0].type === 'video'
+                                ? `<video src="${p.media[0].url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;" muted></video>`
+                                : `<img src="${p.media[0].url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;">`)
                             : `<div style="width:60px;height:60px;background:#eee;border-radius:8px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-image" style="color:#aaa;"></i></div>`}
                         <div>
-                            <strong>${product.name}</strong><br>
-                            <small>💰 ${product.price.toFixed(2)} MAD | 📦 ${product.stock} | 🖼️ ${product.media?.length || 0} médias</small><br>
-                            <small style="color:#667eea;">${product.category}</small>
+                            <strong>${p.name}</strong><br>
+                            <small>💰 ${p.price.toFixed(2)} MAD | 📦 ${p.stock} | 🖼️ ${p.media?.length || 0} médias</small><br>
+                            <small style="color:#667eea;">${p.category}</small>
                         </div>
                     </div>
                     <div style="display:flex;gap:8px;">
-                        <button class="admin-btn" onclick="admin.editProduct(${product.id})" style="background:#667eea;color:white;padding:8px 14px;border-radius:8px;font-size:0.85rem;"><i class="fas fa-edit"></i></button>
-                        <button class="admin-btn danger" onclick="admin.deleteProduct(${product.id})" style="padding:8px 14px;border-radius:8px;font-size:0.85rem;"><i class="fas fa-trash"></i></button>
+                        <button onclick="admin.editProduct(${p.id})" style="background:#667eea;color:white;padding:8px 14px;border-radius:8px;border:none;cursor:pointer;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="admin.deleteProduct(${p.id})" style="background:#ff4757;color:white;padding:8px 14px;border-radius:8px;border:none;cursor:pointer;">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
-                </div>`).join('') || '<p style="text-align:center;color:#aaa;padding:20px;">Aucun produit — commencez par en ajouter un !</p>';
+                </div>`).join('')
+            || '<p style="text-align:center;color:#aaa;padding:20px;">Aucun produit — commencez par en ajouter un !</p>';
     }
 
     async deleteProduct(id) {
-        const product = this.products.find(p => p.id === id);
-        if (!product || !confirm(`🗑️ Supprimer "${product.name}" ?`)) return;
-        this.showLoading(true);
-        try {
-            await this.deleteProductFromGitHub(product._issueNumber);
-            this.showNotification('🗑️ Produit supprimé');
-            await this.loadProducts();
-        } catch { this.showNotification('❌ Erreur suppression'); }
-        this.showLoading(false);
+        const p = this.products.find(p => p.id === id);
+        if (!confirm(`🗑️ Supprimer "${p?.name}" définitivement ?`)) return;
+        this.products = this.products.filter(p => p.id !== id);
+        this.saveLocal();
+        const pushed = await this.pushToGitHub(this.products);
+        this.renderProductsList();
+        document.getElementById('productsCount').textContent = this.products.length;
+        this.showNotification(pushed ? '🗑️ Produit supprimé du site !' : '🗑️ Supprimé localement', pushed ? 'success' : 'warning');
     }
 
     editProduct(id) {
-        const product = this.products.find(p => p.id === id);
-        if (!product) return;
+        const p = this.products.find(p => p.id === id);
+        if (!p) return;
         this.editingId = id;
-        document.getElementById('productName').value = product.name;
-        document.getElementById('productPrice').value = product.price;
-        document.getElementById('productDesc').value = product.description;
-        document.getElementById('productCategory').value = product.category;
-        document.getElementById('productStock').value = product.stock;
-        this.mediaPreviews = product.media ? [...product.media] : [];
-        this.mediaFileRefs = this.mediaPreviews.map(() => null); // déjà publiées — pas de File local à recompresser
+        document.getElementById('productName').value     = p.name;
+        document.getElementById('productPrice').value    = p.price;
+        document.getElementById('productDesc').value     = p.description;
+        document.getElementById('productCategory').value = p.category;
+        document.getElementById('productStock').value    = p.stock;
+        this.mediaPreviews = p.media ? [...p.media] : [];
         this.renderPreviews();
         document.querySelector('.admin-btn.primary').innerHTML = '<i class="fas fa-save"></i> Enregistrer les modifications';
         document.getElementById('productName').scrollIntoView({ behavior: 'smooth' });
-        this.showNotification(`✏️ Édition de "${product.name}"`);
+        this.showNotification(`✏️ Édition de "${p.name}"`, 'success');
     }
 
-    showLoading(show) {
-        let loader = document.getElementById('adminLoader');
-        if (!loader) {
-            loader = document.createElement('div');
-            loader.id = 'adminLoader';
-            loader.innerHTML = `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;"><div style="background:white;border-radius:16px;padding:30px 40px;text-align:center;font-size:1.1rem;font-weight:600;box-shadow:0 20px 60px rgba(0,0,0,0.3);"><div style="font-size:2rem;margin-bottom:10px;">⏳</div>جاري الحفظ...</div></div>`;
-            document.body.appendChild(loader);
-        }
-        loader.style.display = show ? 'block' : 'none';
-    }
-
-    showNotification(msg) {
-        const notif = document.createElement('div');
-        notif.style.cssText = `position:fixed;top:100px;right:20px;background:#2ed573;color:white;padding:15px 25px;border-radius:10px;z-index:10000;font-weight:bold;box-shadow:0 10px 30px rgba(0,0,0,0.3);transform:translateX(400px);transition:transform 0.3s;`;
-        notif.textContent = msg;
-        document.body.appendChild(notif);
-        setTimeout(() => notif.style.transform = 'translateX(0)', 100);
-        setTimeout(() => { notif.style.transform = 'translateX(400px)'; setTimeout(() => notif.remove(), 300); }, 3000);
+    // ── NOTIFICATIONS ────────────────────────────────────────────
+    showNotification(msg, type = 'success') {
+        const bg = { success: 'linear-gradient(45deg,#2ed573,#1abc9c)', warning: 'linear-gradient(45deg,#ffa502,#ff6348)', error: 'linear-gradient(45deg,#ff4757,#c0392b)' };
+        const n = document.createElement('div');
+        n.style.cssText = `position:fixed;top:100px;right:20px;background:${bg[type]||bg.success};color:white;
+            padding:15px 22px;border-radius:12px;z-index:10000;font-weight:bold;max-width:360px;
+            box-shadow:0 10px 30px rgba(0,0,0,0.25);transform:translateX(420px);
+            transition:transform 0.3s;font-size:0.88rem;line-height:1.5;`;
+        n.textContent = msg;
+        document.body.appendChild(n);
+        setTimeout(() => n.style.transform = 'translateX(0)', 100);
+        setTimeout(() => { n.style.transform = 'translateX(420px)'; setTimeout(() => n.remove(), 300); }, 4500);
     }
 }
 
