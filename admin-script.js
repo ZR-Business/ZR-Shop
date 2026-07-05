@@ -6,6 +6,7 @@ class AdminZRShopPro {
     constructor() {
         this.products = [];
         this.mediaPreviews = [];
+        this.mediaFileRefs = []; // même longueur que mediaPreviews — File d'origine (ou null) pour pouvoir recompresser
         this.editingId = null;
         this.GITHUB_USER  = localStorage.getItem('gh_user')  || '';
         this.GITHUB_REPO  = localStorage.getItem('gh_repo')  || '';
@@ -141,27 +142,56 @@ class AdminZRShopPro {
         uploadZone.ondrop = (e) => { e.preventDefault(); this.handleFiles(e.dataTransfer.files); };
     }
 
-    handleFiles(files) {
-        Array.from(files).forEach(async (file) => {
-            if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias!'); return; }
+    async handleFiles(files) {
+        for (const file of Array.from(files)) {
+            if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias!'); break; }
             if (!file.type.includes('image')) {
                 alert(`"${file.name}" mashi ṣura — les vidéos khass tzidhom b lien (chouf l-champ "Vidéo (lien externe)" taht).`);
-                return;
+                continue;
             }
             try {
-                const compressedUrl = await this.compressImage(file);
-                this.mediaPreviews.push({ url: compressedUrl, name: file.name, type: 'image' });
-                this.renderPreviews();
+                // Compression rapide initiale (sera réajustée par recompressAll juste après).
+                const url = await this.compressImageToBudget(file, 999999);
+                this.mediaPreviews.push({ url, name: file.name, type: 'image' });
+                this.mediaFileRefs.push(file);
             } catch (err) {
                 console.error(err);
                 alert(`❌ Mقدرتش نضغط "${file.name}". Jarreb ṣura khra.`);
             }
-        });
+        }
+        await this.recompressAll();
+        this.renderPreviews();
     }
 
-    // Compresse et redimensionne une image côté navigateur pour rester
-    // largement sous la limite de 65 536 caractères d'un body d'issue GitHub.
-    compressImage(file, maxWidth = 900, quality = 0.6) {
+    // Redistribue le budget de caractères entre toutes les photos "recompressables"
+    // (celles dont on a gardé le File d'origine) pour que le total du produit reste
+    // sous la limite GitHub, même si l'utilisatrice ajoute beaucoup de photos.
+    async recompressAll() {
+        const TOTAL_BUDGET = 55000;
+        let fixedLength = 0;
+        const toRecompress = [];
+        this.mediaPreviews.forEach((p, i) => {
+            if (this.mediaFileRefs[i]) toRecompress.push(i);
+            else fixedLength += (p.url ? p.url.length : 0);
+        });
+        if (toRecompress.length === 0) return;
+        const perImageBudget = Math.max(3500, Math.floor((TOTAL_BUDGET - fixedLength) / toRecompress.length));
+        for (const i of toRecompress) {
+            const url = await this.compressImageToBudget(this.mediaFileRefs[i], perImageBudget);
+            this.mediaPreviews[i] = { ...this.mediaPreviews[i], url };
+        }
+    }
+
+    // Réduit progressivement taille/qualité jusqu'à tenir dans le budget de
+    // caractères donné (dataURL base64). Évite de dépasser la limite GitHub
+    // même quand il y a beaucoup de photos sur le même produit.
+    compressImageToBudget(file, targetChars = 7000) {
+        const steps = [
+            { width: 900, quality: 0.6 }, { width: 700, quality: 0.55 },
+            { width: 500, quality: 0.5 }, { width: 380, quality: 0.45 },
+            { width: 300, quality: 0.4 }, { width: 220, quality: 0.35 },
+            { width: 160, quality: 0.3 }
+        ];
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onerror = () => reject(new Error('read failed'));
@@ -169,16 +199,18 @@ class AdminZRShopPro {
                 const img = new Image();
                 img.onerror = () => reject(new Error('image load failed'));
                 img.onload = () => {
-                    let { width, height } = img;
-                    if (width > maxWidth) {
-                        height = Math.round(height * (maxWidth / width));
-                        width = maxWidth;
+                    let best = null;
+                    for (const step of steps) {
+                        let w = img.width, h = img.height;
+                        if (w > step.width) { h = Math.round(h * (step.width / w)); w = step.width; }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const dataUrl = canvas.toDataURL('image/jpeg', step.quality);
+                        best = dataUrl;
+                        if (dataUrl.length <= targetChars) break;
                     }
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
+                    resolve(best);
                 };
                 img.src = e.target.result;
             };
@@ -192,12 +224,20 @@ class AdminZRShopPro {
         if (!url) { alert('⚠️ Dkhel lien dyal la vidéo!'); return; }
         if (this.mediaPreviews.length >= 10) { alert('Maximum 10 médias!'); return; }
         this.mediaPreviews.push({ url, name: 'video-link', type: 'video' });
+        this.mediaFileRefs.push(null);
         input.value = '';
         this.renderPreviews();
     }
 
     renderPreviews() {
-        document.getElementById('previewContainer').innerHTML =
+        const totalChars = this.mediaPreviews.reduce((sum, p) => sum + (p.url ? p.url.length : 0), 0);
+        const totalKB = Math.round(totalChars / 1024);
+        const over = totalChars > 60000;
+        const sizeInfo = this.mediaPreviews.length ? `
+            <div style="grid-column:1/-1;font-size:0.85rem;font-weight:600;color:${over ? '#e74c3c' : '#2ed573'};padding:4px 0;">
+                ${over ? '⚠️' : '✅'} Total médias : ~${totalKB}KB ${over ? '(kbar bzzaf — hيد chi ṣura)' : '(mzyan)'}
+            </div>` : '';
+        document.getElementById('previewContainer').innerHTML = sizeInfo +
             this.mediaPreviews.map((p, i) => `
                 <div class="preview-item">
                     ${p.type === 'video' ? `<video src="${p.url}" style="width:100%;height:100%;object-fit:cover;"></video>` : `<img src="${p.url}" style="width:100%;height:100%;object-fit:cover;">`}
@@ -205,7 +245,12 @@ class AdminZRShopPro {
                 </div>`).join('');
     }
 
-    removeMedia(index) { this.mediaPreviews.splice(index, 1); this.renderPreviews(); }
+    async removeMedia(index) {
+        this.mediaPreviews.splice(index, 1);
+        this.mediaFileRefs.splice(index, 1);
+        await this.recompressAll();
+        this.renderPreviews();
+    }
 
     async addProduct(e) {
         e.preventDefault();
@@ -245,6 +290,7 @@ class AdminZRShopPro {
             }
             document.getElementById('productForm').reset();
             this.mediaPreviews = [];
+            this.mediaFileRefs = [];
             document.getElementById('previewContainer').innerHTML = '';
             await this.loadProducts();
         } catch (err) {
@@ -308,6 +354,7 @@ class AdminZRShopPro {
         document.getElementById('productCategory').value = product.category;
         document.getElementById('productStock').value = product.stock;
         this.mediaPreviews = product.media ? [...product.media] : [];
+        this.mediaFileRefs = this.mediaPreviews.map(() => null); // déjà publiées — pas de File local à recompresser
         this.renderPreviews();
         document.querySelector('.admin-btn.primary').innerHTML = '<i class="fas fa-save"></i> Enregistrer les modifications';
         document.getElementById('productName').scrollIntoView({ behavior: 'smooth' });
