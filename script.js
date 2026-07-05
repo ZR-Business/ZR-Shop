@@ -1,11 +1,11 @@
 class ZRShop {
     constructor() {
-        this.products         = [];
-        this.visibleProducts  = 6;
-        this.sliderState      = {};
+        this.products = [];
+        this.visibleProducts = 6;
+        this.sliderState = {};
         this.modalSliderState = { current: 0, total: 0 };
-        this.currentModalId   = null;
-        this.currentStars     = 5;
+        this.currentModalId = null;
+        this.currentStars = 5;
         this.init();
     }
 
@@ -20,31 +20,50 @@ class ZRShop {
 
     async loadProducts() {
         try {
-            let jsonProducts = [];
-            try {
-                const res = await fetch('data.json');
-                jsonProducts = await res.json();
-            } catch (e) {}
-            // Si data.json a des produits → utilise-les (source GitHub = vérité)
-            // Sinon fallback localStorage
-            if (jsonProducts.length > 0) {
-                this.products = jsonProducts;
-            } else {
-                const local = JSON.parse(localStorage.getItem('zrshop_products') || '[]');
-                this.products = local;
+            // قراءة إعدادات GitHub من data.json
+            const config = await fetch('data.json').then(r => r.json()).catch(() => ({}));
+            const ghUser = config.github_user;
+            const ghRepo = config.github_repo;
+
+            if (ghUser && ghRepo) {
+                // تحميل les produits من GitHub Issues (مجاني وبلا token للقراءة)
+                const res = await fetch(
+                    `https://api.github.com/repos/${ghUser}/${ghRepo}/issues?labels=produit&state=open&per_page=100`,
+                    { headers: { 'Accept': 'application/vnd.github.v3+json' } }
+                );
+                if (res.ok) {
+                    const issues = await res.json();
+                    this.products = issues.map(issue => {
+                        try {
+                            const match = issue.body.match(/```json\n([\s\S]*?)\n```/);
+                            if (!match) return null;
+                            const data = JSON.parse(match[1]);
+                            return { ...data, id: issue.number };
+                        } catch { return null; }
+                    }).filter(Boolean);
+                    this.products.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+                    return;
+                }
             }
-            this.products.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-        } catch (e) {
+        } catch (error) {
+            console.error('GitHub load error:', error);
+        }
+        // Fallback: data.json مباشرة (للاختبار المحلي)
+        try {
+            const response = await fetch('data.json');
+            const data = await response.json();
+            this.products = Array.isArray(data) ? data : [];
+        } catch {
             this.products = [];
         }
     }
 
     renderProducts() {
         const grid = document.getElementById('productsGrid');
-        const list = this.products.slice(0, this.visibleProducts);
+        const productsToShow = this.products.slice(0, this.visibleProducts);
 
-        grid.innerHTML = list.map((product, index) => {
-            const mediaList = product.media ? [...product.media] : [];
+        grid.innerHTML = productsToShow.map((product, index) => {
+            const mediaList = product.media || [];
             if (mediaList.length === 0 && product.image) mediaList.push({ type: 'image', url: product.image });
             const hasMultiple = mediaList.length > 1;
 
@@ -56,19 +75,23 @@ class ZRShop {
                             <div class="slide ${i === 0 ? 'active' : ''}">
                                 ${m.type === 'video'
                                     ? `<video src="${m.url}" muted autoplay loop playsinline style="width:100%;height:100%;object-fit:cover;"></video>`
-                                    : `<img src="${m.url}" alt="${product.name}" onerror="this.src='https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400';" style="width:100%;height:100%;object-fit:cover;">`}
-                            </div>`).join('') : `
+                                    : `<img src="${m.url}" alt="${product.name}" onerror="this.src='https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400';" style="width:100%;height:100%;object-fit:cover;">`
+                                }
+                            </div>
+                        `).join('') : `
                             <div class="slide active">
                                 <div style="height:280px;background:linear-gradient(45deg,#1a1a1a,#333);display:flex;align-items:center;justify-content:center;">
                                     <i class="fas fa-image" style="font-size:4rem;color:#555;"></i>
                                 </div>
-                            </div>`}
+                            </div>
+                        `}
                     </div>
                     ${hasMultiple ? `
                         <button class="slider-btn prev" onclick="event.stopPropagation();zrshop.slideMedia('${product.id}',-1)"><i class="fas fa-chevron-left"></i></button>
                         <button class="slider-btn next" onclick="event.stopPropagation();zrshop.slideMedia('${product.id}',1)"><i class="fas fa-chevron-right"></i></button>
                         <div class="slider-dots">${mediaList.map((_,i)=>`<span class="dot ${i===0?'active':''}" onclick="event.stopPropagation();zrshop.goToSlide('${product.id}',${i})"></span>`).join('')}</div>
-                        <div class="media-count"><i class="fas fa-images"></i> ${mediaList.length}</div>` : ''}
+                        <div class="media-count"><i class="fas fa-images"></i> ${mediaList.length}</div>
+                    ` : ''}
                     ${product.category ? `<div class="category-badge">${product.category}</div>` : ''}
                 </div>
                 <div class="product-info">
@@ -77,7 +100,7 @@ class ZRShop {
                     <p class="product-desc">${(product.description || 'Qualité premium garantie').substring(0, 80)}${(product.description?.length > 80) ? '...' : ''}</p>
                     <div class="product-actions">
                         <button class="product-order primary" onclick="event.stopPropagation();zrshop.quickOrder(${product.id})">
-                            <i class="fab fa-whatsapp"></i> Commander
+                            <i class="fab fa-whatsapp"></i> Commander WhatsApp
                         </button>
                         ${product.stock === 0 ? '<span class="stock-out">🔴 Rupture</span>' : '<span class="stock-info">🟢 Disponible</span>'}
                     </div>
@@ -86,7 +109,7 @@ class ZRShop {
         }).join('');
 
         this.sliderState = {};
-        list.forEach(p => {
+        this.products.slice(0, this.visibleProducts).forEach(p => {
             this.sliderState[p.id] = { current: 0, total: p.media?.length || (p.image ? 1 : 0) };
         });
 
@@ -94,18 +117,18 @@ class ZRShop {
             this.products.length > this.visibleProducts ? 'flex' : 'none';
     }
 
-    // ── CARD SLIDER ──────────────────────────────────────────────
-    slideMedia(productId, dir) {
+    // ── CARD SLIDER ──────────────────────────────────────────
+    slideMedia(productId, direction) {
         const slider = document.getElementById(`slider-${productId}`);
         if (!slider) return;
         const slides = slider.querySelectorAll('.slide');
-        const dots   = slider.parentElement.querySelectorAll('.dot');
+        const dots = slider.parentElement.querySelectorAll('.dot');
         if (!slides.length) return;
         if (!this.sliderState[productId]) this.sliderState[productId] = { current: 0, total: slides.length };
         let cur = this.sliderState[productId].current;
         slides[cur].classList.remove('active');
         if (dots[cur]) dots[cur].classList.remove('active');
-        cur = (cur + dir + slides.length) % slides.length;
+        cur = (cur + direction + slides.length) % slides.length;
         this.sliderState[productId].current = cur;
         slides[cur].classList.add('active');
         if (dots[cur]) dots[cur].classList.add('active');
@@ -115,7 +138,7 @@ class ZRShop {
         const slider = document.getElementById(`slider-${productId}`);
         if (!slider) return;
         const slides = slider.querySelectorAll('.slide');
-        const dots   = slider.parentElement.querySelectorAll('.dot');
+        const dots = slider.parentElement.querySelectorAll('.dot');
         if (!this.sliderState[productId]) this.sliderState[productId] = { current: 0, total: slides.length };
         const cur = this.sliderState[productId].current;
         slides[cur].classList.remove('active');
@@ -125,7 +148,7 @@ class ZRShop {
         if (dots[index]) dots[index].classList.add('active');
     }
 
-    // ── MODAL ────────────────────────────────────────────────────
+    // ── MODAL ────────────────────────────────────────────────
     createModal() {
         const modal = document.createElement('div');
         modal.id = 'productModal';
@@ -137,7 +160,7 @@ class ZRShop {
                     <div class="modal-media">
                         <div class="modal-slider" id="modalSlider"></div>
                         <button class="slider-btn prev" id="modalPrev" onclick="zrshop.modalSlide(-1)" style="display:none;"><i class="fas fa-chevron-left"></i></button>
-                        <button class="slider-btn next" id="modalNext" onclick="zrshop.modalSlide(1)"  style="display:none;"><i class="fas fa-chevron-right"></i></button>
+                        <button class="slider-btn next" id="modalNext" onclick="zrshop.modalSlide(1)" style="display:none;"><i class="fas fa-chevron-right"></i></button>
                         <div class="slider-dots" id="modalDots"></div>
                     </div>
                     <div class="modal-details">
@@ -179,7 +202,7 @@ class ZRShop {
         if (!product) return;
         this.currentModalId = productId;
 
-        const mediaList = product.media ? [...product.media] : [];
+        const mediaList = product.media || [];
         if (mediaList.length === 0 && product.image) mediaList.push({ type: 'image', url: product.image });
 
         this.modalSliderState = { current: 0, total: mediaList.length };
@@ -188,19 +211,21 @@ class ZRShop {
             <div class="modal-slide" style="position:absolute;inset:0;opacity:${i===0?1:0};transition:opacity 0.4s;pointer-events:${i===0?'auto':'none'};">
                 ${m.type === 'video'
                     ? `<video src="${m.url}" controls style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`
-                    : `<img src="${m.url}" alt="${product.name}" style="width:100%;height:100%;object-fit:contain;background:#111;">`}
-            </div>`).join('')
-            || `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a1a;"><i class="fas fa-image" style="font-size:5rem;color:#444;"></i></div>`;
+                    : `<img src="${m.url}" alt="${product.name}" style="width:100%;height:100%;object-fit:contain;background:#111;">`
+                }
+            </div>
+        `).join('') || `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a1a;"><i class="fas fa-image" style="font-size:5rem;color:#444;"></i></div>`;
 
         document.getElementById('modalDots').innerHTML = mediaList.length > 1
-            ? mediaList.map((_, i) => `<span class="dot ${i===0?'active':''}" onclick="zrshop.modalGoTo(${i})"></span>`).join('') : '';
+            ? mediaList.map((_, i) => `<span class="dot ${i===0?'active':''}" onclick="zrshop.modalGoTo(${i})"></span>`).join('')
+            : '';
         document.getElementById('modalPrev').style.display = mediaList.length > 1 ? 'flex' : 'none';
         document.getElementById('modalNext').style.display = mediaList.length > 1 ? 'flex' : 'none';
 
         document.getElementById('modalCategory').textContent = product.category || '';
-        document.getElementById('modalName').textContent     = product.name;
-        document.getElementById('modalPrice').textContent    = (product.price?.toFixed(2) || '0.00') + ' MAD';
-        document.getElementById('modalStock').innerHTML      = product.stock === 0
+        document.getElementById('modalName').textContent = product.name;
+        document.getElementById('modalPrice').textContent = (product.price?.toFixed(2) || '0.00') + ' MAD';
+        document.getElementById('modalStock').innerHTML = product.stock === 0
             ? '<span style="color:#ff4757;">🔴 Rupture de stock</span>'
             : `<span style="color:#2ed573;">🟢 En stock (${product.stock} disponibles)</span>`;
         document.getElementById('modalDesc').textContent = product.description || 'Qualité premium garantie.';
@@ -208,6 +233,7 @@ class ZRShop {
         this.renderComments(productId);
         this.currentStars = 5;
         this.updateStarUI(5);
+
         document.getElementById('productModal').classList.add('open');
         document.body.classList.add('no-scroll');
     }
@@ -218,14 +244,14 @@ class ZRShop {
         this.currentModalId = null;
     }
 
-    modalSlide(dir) {
+    modalSlide(direction) {
         const slides = document.querySelectorAll('.modal-slide');
-        const dots   = document.querySelectorAll('#modalDots .dot');
+        const dots = document.querySelectorAll('#modalDots .dot');
         if (!slides.length) return;
         let cur = this.modalSliderState.current;
         slides[cur].style.opacity = '0'; slides[cur].style.pointerEvents = 'none';
         if (dots[cur]) dots[cur].classList.remove('active');
-        cur = (cur + dir + slides.length) % slides.length;
+        cur = (cur + direction + slides.length) % slides.length;
         this.modalSliderState.current = cur;
         slides[cur].style.opacity = '1'; slides[cur].style.pointerEvents = 'auto';
         if (dots[cur]) dots[cur].classList.add('active');
@@ -233,8 +259,8 @@ class ZRShop {
 
     modalGoTo(index) {
         const slides = document.querySelectorAll('.modal-slide');
-        const dots   = document.querySelectorAll('#modalDots .dot');
-        const cur    = this.modalSliderState.current;
+        const dots = document.querySelectorAll('#modalDots .dot');
+        const cur = this.modalSliderState.current;
         slides[cur].style.opacity = '0'; slides[cur].style.pointerEvents = 'none';
         if (dots[cur]) dots[cur].classList.remove('active');
         this.modalSliderState.current = index;
@@ -242,13 +268,15 @@ class ZRShop {
         if (dots[index]) dots[index].classList.add('active');
     }
 
-    // ── COMMENTAIRES ─────────────────────────────────────────────
+    // ── COMMENTAIRES ─────────────────────────────────────────
     getComments(productId) {
         return JSON.parse(localStorage.getItem(`zrshop_comments_${productId}`) || '[]');
     }
+
     saveComments(productId, comments) {
         localStorage.setItem(`zrshop_comments_${productId}`, JSON.stringify(comments));
     }
+
     renderComments(productId) {
         const comments = this.getComments(productId);
         document.getElementById('commentsCount').textContent = comments.length;
@@ -257,17 +285,25 @@ class ZRShop {
                 <div class="comment-item">
                     <div class="comment-header">
                         <strong>${c.name}</strong>
-                        <span class="comment-stars">${'★'.repeat(c.stars)}${'☆'.repeat(5-c.stars)}</span>
+                        <span class="comment-stars">${'★'.repeat(c.stars)}${'☆'.repeat(5 - c.stars)}</span>
                         <span class="comment-date">${c.date}</span>
                     </div>
                     <p>${c.text}</p>
                 </div>`).join('')
             : '<p class="no-comments">Soyez le premier à laisser un avis ! 💬</p>';
     }
-    setStars(n) { this.currentStars = n; this.updateStarUI(n); }
-    updateStarUI(n) {
-        document.querySelectorAll('#starRating span').forEach((s, i) => { s.style.color = i < n ? '#f7931e' : '#ccc'; });
+
+    setStars(n) {
+        this.currentStars = n;
+        this.updateStarUI(n);
     }
+
+    updateStarUI(n) {
+        document.querySelectorAll('#starRating span').forEach((s, i) => {
+            s.style.color = i < n ? '#f7931e' : '#ccc';
+        });
+    }
+
     submitComment() {
         const name = document.getElementById('commentName').value.trim();
         const text = document.getElementById('commentText').value.trim();
@@ -278,27 +314,27 @@ class ZRShop {
         this.renderComments(this.currentModalId);
         document.getElementById('commentName').value = '';
         document.getElementById('commentText').value = '';
-        this.currentStars = 5; this.updateStarUI(5);
+        this.currentStars = 5;
+        this.updateStarUI(5);
         this.showNotification('✅ Avis publié, choukran ! 🙏');
     }
 
-    // ── COMMANDE WHATSAPP ─────────────────────────────────────────
+    // ── COMMANDE ─────────────────────────────────────────────
     quickOrder(productId) {
         const product = this.products.find(p => p.id === productId);
         if (!product) return;
         const msg = `Salam ZR-Shop ! 👋%0A%0A📦 Produit: ${encodeURIComponent(product.name)}%0A💰 Prix: ${product.price?.toFixed(2)} MAD%0A📝 Quantité: 1%0A%0ABghit ncommandi, choukran ! 🙏`;
-        window.open(`https://wa.me/212728805714?text=${msg}`, '_blank');
+        window.open(`https://wa.me/212600000000?text=${msg}`, '_blank');
         this.showNotification('💬 Redirection vers WhatsApp...');
     }
 
-    // ── STATS & EVENTS ────────────────────────────────────────────
     updateStats() {
         document.getElementById('productsCountHero').textContent = this.products.length;
     }
 
     setupEventListeners() {
         const hamburger = document.querySelector('.hamburger');
-        const navMenu   = document.querySelector('.nav-menu');
+        const navMenu = document.querySelector('.nav-menu');
         hamburger?.addEventListener('click', () => {
             hamburger.classList.toggle('active');
             navMenu.classList.toggle('active');
@@ -310,6 +346,10 @@ class ZRShop {
                 document.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth' });
             });
         });
+        document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
+            this.visibleProducts += 6;
+            this.renderProducts();
+        });
         document.querySelectorAll('.category-card')?.forEach(card => {
             card.addEventListener('click', (e) => this.filterByCategory(e.currentTarget.dataset.category));
         });
@@ -319,16 +359,15 @@ class ZRShop {
     filterByCategory(category) {
         document.querySelectorAll('.product-card').forEach(card => {
             const match = category === 'Toutes' || card.dataset.category === category;
-            card.style.opacity   = match ? '1' : '0.3';
+            card.style.opacity = match ? '1' : '0.3';
             card.style.transform = match ? 'translateY(0) scale(1)' : 'scale(0.95)';
         });
     }
 
     animateOnScroll() {
-        const observer = new IntersectionObserver(
-            (entries) => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('animate'); }),
-            { threshold: 0.1 }
-        );
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('animate'); });
+        }, { threshold: 0.1 });
         document.querySelectorAll('.product-card, .category-card, .step').forEach(el => observer.observe(el));
     }
 
@@ -342,11 +381,12 @@ class ZRShop {
     }
 }
 
-// ── CSS ──────────────────────────────────────────────────────────
+// ── CSS ───────────────────────────────────────────────────────
 const style = document.createElement('style');
 style.textContent = `
     body.no-scroll { overflow: hidden; }
 
+    /* Card slider */
     .media-slider { position:relative; width:100%; height:100%; }
     .slide { position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; transition:opacity 0.4s; pointer-events:none; }
     .slide.active { opacity:1; pointer-events:auto; }
@@ -359,6 +399,7 @@ style.textContent = `
     .dot.active { background:white; transform:scale(1.3); }
     .media-count { position:absolute; bottom:10px; right:12px; background:rgba(0,0,0,0.55); color:white; padding:3px 10px; border-radius:15px; font-size:0.75rem; z-index:10; }
 
+    /* MODAL */
     #productModal { display:none; position:fixed; inset:0; z-index:9000; align-items:center; justify-content:center; padding:15px; }
     #productModal.open { display:flex; }
     .modal-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.78); backdrop-filter:blur(5px); }
@@ -379,6 +420,7 @@ style.textContent = `
     .modal-desc { color:#555; line-height:1.7; font-size:0.93rem; }
     .modal-order { width:100%; padding:13px; font-size:1rem; }
 
+    /* Commentaires */
     .modal-comments { border-top:2px solid #f0f0f0; padding-top:15px; margin-top:4px; }
     .modal-comments h4 { font-size:0.95rem; color:#333; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
     .comments-list { display:flex; flex-direction:column; gap:9px; margin-bottom:13px; max-height:170px; overflow-y:auto; }
@@ -397,6 +439,7 @@ style.textContent = `
     .comment-submit { background:linear-gradient(45deg,#667eea,#764ba2); color:white; border:none; padding:10px 18px; border-radius:25px; font-weight:600; cursor:pointer; font-size:0.9rem; display:flex; align-items:center; gap:7px; justify-content:center; transition:opacity 0.2s; }
     .comment-submit:hover { opacity:0.85; }
 
+    /* Misc */
     .notification { position:fixed; top:20px; right:-420px; background:linear-gradient(45deg,#2ed573,#1abc9c); color:white; padding:18px 28px; border-radius:14px; box-shadow:0 15px 35px rgba(46,213,115,0.4); z-index:10000; font-weight:500; display:flex; align-items:center; gap:11px; transition:right 0.4s cubic-bezier(0.25,0.46,0.45,0.94); max-width:380px; font-size:0.95rem; }
     .notification.show { right:18px; }
     .product-card, .category-card, .step { opacity:0; transform:translateY(60px); transition:all 0.8s cubic-bezier(0.25,0.46,0.45,0.94); }
@@ -406,9 +449,9 @@ style.textContent = `
     .stock-info { color:#2ed573 !important; font-size:0.9rem; font-weight:500; }
     .product-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
     .product-card { cursor:pointer; }
-    .product-order { background:linear-gradient(45deg,#25D366,#128C7E); color:white; padding:12px 25px; border:none; border-radius:25px; font-weight:bold; cursor:pointer; transition:all 0.3s; display:flex; align-items:center; gap:8px; font-size:0.95rem; }
-    .product-order:hover { transform:scale(1.05); opacity:0.9; }
 `;
 document.head.appendChild(style);
 
-document.addEventListener('DOMContentLoaded', () => { window.zrshop = new ZRShop(); });
+document.addEventListener('DOMContentLoaded', () => {
+    window.zrshop = new ZRShop();
+});
